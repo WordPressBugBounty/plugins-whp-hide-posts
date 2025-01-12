@@ -181,7 +181,7 @@ class Dashboard {
 			);
 
 			echo '<div class="notice notice-success">';
-			echo '<p>Migaration Complete.</p>';
+			echo '<p>Migration Complete.</p>';
 			echo '<p><a href="' . esc_url( $action_url ) . '" class="button button-primary">Close Notice</a></p>';
 			echo '</div>';
 			return;
