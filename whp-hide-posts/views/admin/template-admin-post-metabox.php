@@ -2,11 +2,12 @@
 /**
  * Template for showing the hide options on create/edit post.
  *
- * @package WordPressHidePosts
+ * @package HidePostsPlugin
  */
 
 ?>
 <div class='whp_hide_posts'>
+	<?php wp_nonce_field( 'wp_metabox_nonce', 'wp_metabox_nonce_value' ); ?>
 	<p>
 		<label for='whp_select_all'>
 			<input type='checkbox' id='whp_select_all'>
@@ -102,6 +103,34 @@
 			<em><?php esc_html_e( '(This will hide post from recent posts, related posts and any other widget shown on the single post page)', 'whp-hide-posts' ); ?></em>
 		</label>
 	</p>
+	<h4><?php esc_html_e( 'Sitemap & SEO Options', 'whp-hide-posts' ); ?></h4>
+	<p>
+		<label for='whp_hide_on_xml_sitemap'>
+			<input type='checkbox' name="whp_hide_on_xml_sitemap" value='1' <?php checked( $whp_hide_on_xml_sitemap, 1 ); ?> id='whp_hide_on_xml_sitemap'>
+			<?php esc_html_e( 'Hide from WordPress XML sitemap', 'whp-hide-posts' ); ?>
+			<em><?php esc_html_e( '(WordPress core sitemap)', 'whp-hide-posts' ); ?></em>
+		</label>
+	</p>
+	<?php if ( whp_plugin()->is_yoast_seo_active() ) : ?>
+		<p>
+			<label for='whp_hide_on_yoast_sitemap'>
+				<input type='checkbox' name="whp_hide_on_yoast_sitemap" value='1' <?php checked( $whp_hide_on_yoast_sitemap, 1 ); ?> id='whp_hide_on_yoast_sitemap'>
+				<?php esc_html_e( 'Hide from Yoast SEO sitemap', 'whp-hide-posts' ); ?>
+			</label>
+		</p>
+		<p>
+			<label for='whp_hide_on_yoast_breadcrumbs'>
+				<input type='checkbox' name="whp_hide_on_yoast_breadcrumbs" value='1' <?php checked( $whp_hide_on_yoast_breadcrumbs, 1 ); ?> id='whp_hide_on_yoast_breadcrumbs'>
+				<?php esc_html_e( 'Hide from Yoast SEO breadcrumbs', 'whp-hide-posts' ); ?>
+			</label>
+		</p>
+		<p>
+			<label for='whp_hide_on_yoast_internal_links'>
+				<input type='checkbox' name="whp_hide_on_yoast_internal_links" value='1' <?php checked( $whp_hide_on_yoast_internal_links, 1 ); ?> id='whp_hide_on_yoast_internal_links'>
+				<?php esc_html_e( 'Hide from Yoast internal link suggestions', 'whp-hide-posts' ); ?>
+			</label>
+		</p>
+	<?php endif; ?>
 	<?php if ( whp_plugin()->is_woocommerce_active() && whp_plugin()->is_woocommerce_product() ) : ?>
 		<h4><?php esc_html_e( 'Woocommerce options', 'whp-hide-posts' ); ?></h4>
 		<p>

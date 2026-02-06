@@ -4,7 +4,7 @@
  *
  * @link https://themeforest.net/item/zeen-next-generation-magazine-wordpress-theme/22709856
  *
- * @package    WordPressHidePosts
+ * @package    HidePostsPlugin
  */
 
 namespace MartinCV\WHP;

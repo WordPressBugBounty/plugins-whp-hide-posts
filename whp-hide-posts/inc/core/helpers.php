@@ -6,7 +6,7 @@
  *
  * @deprecated 1.0.0
  *
- * @package    WordPressHidePosts
+ * @package    HidePostsPlugin
  */
 
 // Exit if accessed directly.

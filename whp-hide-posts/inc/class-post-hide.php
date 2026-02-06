@@ -2,7 +2,7 @@
 /**
  * Logic for hiding posts happens here.
  *
- * @package    WordPressHidePosts
+ * @package    HidePostsPlugin
  */
 
 namespace MartinCV\WHP;
@@ -38,6 +38,8 @@ class Post_Hide {
 		add_filter( 'get_next_post_where', array( $this, 'hide_from_post_navigation' ), 10, 1 );
 		add_filter( 'get_previous_post_where', array( $this, 'hide_from_post_navigation' ), 10, 1 );
 		add_filter( 'widget_posts_args', array( $this, 'hide_from_recent_post_widget' ), 10, 1 );
+		add_filter( 'query_loop_block_query_vars', array( $this, 'hide_from_query_block' ), 10, 2 );
+		add_filter( 'render_block_core/latest-posts', array( $this, 'hide_from_latest_posts_block' ), 10, 2 );
 
 		foreach ( $this->enabled_post_types as $pt ) {
 			if ( 'product' !== $pt ) {
@@ -110,7 +112,7 @@ class Post_Hide {
 				( is_array( $q_post_type ) && ! empty( array_intersect( $q_post_type, $this->enabled_post_types ) ) )
 			)
 		) {
-			$table_name = $wpdb->prefix . 'whp_posts_visibility';
+			$table_name = esc_sql( $wpdb->prefix . 'whp_posts_visibility' );
 			// Handle single post pages
 			if ( is_singular( $q_post_type ) && ! $query->is_main_query() ) {
 				$hidden_posts = $wpdb->get_col(
@@ -120,6 +122,12 @@ class Post_Hide {
 					)
 				);
 
+				if ( $wpdb->last_error ) {
+					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					error_log( sprintf( 'WHP: Failed to get hidden posts on single page: %s', $wpdb->last_error ) );
+					return;
+				}
+
 				if ( ! empty( $hidden_posts ) ) {
 					$existing_posts = $query->get( 'post__not_in' );
 					if ( ! is_array( $existing_posts ) ) {
@@ -127,21 +135,25 @@ class Post_Hide {
 					}
 					$query->set( 'post__not_in', array_unique( array_merge( $existing_posts, $hidden_posts ) ) );
 				} else {
-					// Fallback to meta
-					$query->set( 'meta_key', '_whp_hide_on_single_post_page' );
-					$query->set( 'meta_compare', 'NOT EXISTS' );
+					// Fallback to meta.
+					$existing_meta_query = $query->get( 'meta_query', array() );
+					$existing_meta_query[] = array(
+						'key'     => '_whp_hide_on_single_post_page',
+						'compare' => 'NOT EXISTS',
+					);
+					$query->set( 'meta_query', $existing_meta_query );
 				}
-			} 
-			
+			}
+
 			if ( ( is_front_page() && is_home() ) || is_front_page() ) {
 				$this->exclude_by_condition( $query, 'hide_on_frontpage', '_whp_hide_on_frontpage' );
 			} elseif ( is_home() ) {
 				$this->exclude_by_condition( $query, 'hide_on_blog_page', '_whp_hide_on_blog_page' );
-			} 
+			}
 
 			if ( is_post_type_archive( $q_post_type ) ) {
 				$this->exclude_by_condition( $query, 'hide_on_cpt_archive', '_whp_hide_on_cpt_archive' );
-			} elseif ( is_category( $q_post_type ) ) {
+			} elseif ( is_category() ) {
 				$this->exclude_by_condition( $query, 'hide_on_categories', '_whp_hide_on_categories' );
 			} elseif ( is_tag() ) {
 				$this->exclude_by_condition( $query, 'hide_on_tags', '_whp_hide_on_tags' );
@@ -173,7 +185,7 @@ class Post_Hide {
 	private function exclude_by_condition( &$query, $condition, $meta_key ) {
 		global $wpdb;
 
-		$table_name = $wpdb->prefix . 'whp_posts_visibility';
+		$table_name = esc_sql( $wpdb->prefix . 'whp_posts_visibility' );
 
 		$hidden_posts = $wpdb->get_col(
 			$wpdb->prepare(
@@ -181,6 +193,12 @@ class Post_Hide {
 				$condition
 			)
 		);
+
+		if ( $wpdb->last_error ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( 'WHP: Failed to exclude by condition %s: %s', $condition, $wpdb->last_error ) );
+			return;
+		}
 
 		if ( ! empty( $hidden_posts ) ) {
 			$existing_posts = $query->get( 'post__not_in' );
@@ -192,9 +210,13 @@ class Post_Hide {
 			$data_migrated = get_option( 'whp_data_migrated', false );
 
 			if ( ! $data_migrated ) {
-				// Fallback to meta
-				$query->set( 'meta_key', $meta_key );
-				$query->set( 'meta_compare', 'NOT EXISTS' );
+				// Fallback to meta.
+				$existing_meta_query   = $query->get( 'meta_query', array() );
+				$existing_meta_query[] = array(
+					'key'     => $meta_key,
+					'compare' => 'NOT EXISTS',
+				);
+				$query->set( 'meta_query', $existing_meta_query );
 			}
 		}
 	}
@@ -248,5 +270,75 @@ class Post_Hide {
 		$query_args['post__not_in'] = $hidden_on_recent_posts;
 
 		return $query_args;
+	}
+
+	/**
+	 * Hide posts from Gutenberg Query Loop block
+	 *
+	 * @param   array $query Query arguments.
+	 * @param   array $block Block instance.
+	 *
+	 * @return  array
+	 */
+	public function hide_from_query_block( $query, $block ) {
+		if ( ! isset( $query['post_type'] ) ) {
+			return $query;
+		}
+
+		$post_type = is_array( $query['post_type'] ) ? $query['post_type'][0] : $query['post_type'];
+
+		if ( ! in_array( $post_type, $this->enabled_post_types, true ) ) {
+			return $query;
+		}
+
+		$data_migrated = get_option( 'whp_data_migrated', false );
+		$fallback      = ! $data_migrated;
+
+		// Determine which hide context to use based on current page.
+		$hide_context = 'all';
+		if ( is_front_page() ) {
+			$hide_context = 'front_page';
+		} elseif ( is_home() ) {
+			$hide_context = 'blog_page';
+		} elseif ( is_category() ) {
+			$hide_context = 'categories';
+		} elseif ( is_tag() ) {
+			$hide_context = 'tags';
+		} elseif ( is_author() ) {
+			$hide_context = 'authors';
+		} elseif ( is_search() ) {
+			$hide_context = 'search';
+		} elseif ( is_date() ) {
+			$hide_context = 'date';
+		} elseif ( is_archive() ) {
+			$hide_context = 'cpt_archive';
+		}
+
+		$hidden_ids = whp_plugin()->get_hidden_posts_ids( $post_type, $hide_context, $fallback );
+
+		if ( ! empty( $hidden_ids ) ) {
+			$query['post__not_in'] = ! empty( $query['post__not_in'] ) ? array_unique( array_merge( $hidden_ids, $query['post__not_in'] ) ) : $hidden_ids;
+		}
+
+		return $query;
+	}
+
+	/**
+	 * Hide posts from Gutenberg Latest Posts block
+	 * This block is server-side rendered, so we can't filter via REST API
+	 * We need to use the pre_render_block filter instead
+	 *
+	 * @param   string $block_content Block HTML content.
+	 * @param   array  $block         Block instance.
+	 *
+	 * @return  string
+	 */
+	public function hide_from_latest_posts_block( $block_content, $block ) {
+		// The Latest Posts block uses WP_Query internally during server-side rendering.
+		// Our pre_get_posts filter at priority 99 should catch it automatically.
+		// However, if block is rendered via REST, we need the rest_post_query filter.
+		// Since we already hook rest_{post_type}_query, hidden posts are filtered.
+		// So we just return the block content as-is - filtering happens upstream.
+		return $block_content;
 	}
 }

@@ -2,7 +2,7 @@
 /**
  * Signleton trait
  *
- * @package    WordPressHidePosts
+ * @package    HidePostsPlugin
  */
 
 namespace MartinCV\WHP\Traits;

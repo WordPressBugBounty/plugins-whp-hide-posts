@@ -24,7 +24,7 @@ class Database {
 	 * @return  void
 	 */
 	public function create_tables() {
-		$current_db_version = 1;
+		$current_db_version = 2;
 		$db_version         = get_option( 'whp_db_version', 0 );
 
 		if ( $current_db_version === (int) $db_version ) {
@@ -42,6 +42,7 @@ class Database {
 			post_id BIGINT(20) UNSIGNED NOT NULL,
 			`condition` VARCHAR(100) NOT NULL,
 			PRIMARY KEY (id),
+			UNIQUE KEY post_condition (post_id,`condition`),
 			INDEX pid_con (post_id,`condition`)
 		) $charset_collate;";
 

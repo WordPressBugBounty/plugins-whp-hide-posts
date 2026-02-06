@@ -2,7 +2,7 @@
 /**
  * Admin dashboard settings
  *
- * @package    WordPressHidePosts
+ * @package    HidePostsPlugin
  */
 
 namespace MartinCV\WHP\Admin;
@@ -71,19 +71,28 @@ class Dashboard {
 
 	/**
 	 * Migrate hide posts data from meta to table
+	 * Uses transient lock to prevent race conditions
 	 *
 	 * @return void
 	 */
 	public function migrate_meta_to_table() {
+		// Use a transient lock to prevent concurrent migrations.
+		if ( false !== get_transient( 'whp_migration_lock' ) ) {
+			return; // Migration already in progress.
+		}
+
+		set_transient( 'whp_migration_lock', true, 5 * MINUTE_IN_SECONDS );
+
 		$data_migrated = get_option( 'whp_data_migrated', false );
 
 		if ( $data_migrated ) {
+			delete_transient( 'whp_migration_lock' );
 			return;
 		}
 
 		global $wpdb;
 
-		$table_name = $wpdb->prefix . 'whp_posts_visibility';
+		$table_name = esc_sql( $wpdb->prefix . 'whp_posts_visibility' );
 
 		$table_exists = $wpdb->get_var(
 			$wpdb->prepare(
@@ -92,65 +101,121 @@ class Dashboard {
 			)
 		);
 
+		if ( $wpdb->last_error ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( 'WHP: Failed to check table existence: %s', $wpdb->last_error ) );
+			delete_transient( 'whp_migration_lock' );
+			return;
+		}
+
 		if ( $table_exists !== $table_name ) {
 			return;
 		}
 
-		$meta_keys = [
-			'_whp_hide_on_frontpage'        => 'hide_on_frontpage',
-			'_whp_hide_on_blog_page'        => 'hide_on_blog_page',
-			'_whp_hide_on_cpt_archive'      => 'hide_on_cpt_archive',
-			'_whp_hide_on_categories'       => 'hide_on_categories',
-			'_whp_hide_on_search'           => 'hide_on_search',
-			'_whp_hide_on_tags'             => 'hide_on_tags',
-			'_whp_hide_on_authors'          => 'hide_on_authors',
-			'_whp_hide_on_date'             => 'hide_on_date',
-			'_whp_hide_in_rss_feed'         => 'hide_in_rss_feed',
-			'_whp_hide_on_store'            => 'hide_on_store',
-			'_whp_hide_on_product_category' => 'hide_on_product_category',
-			'_whp_hide_on_single_post_page' => 'hide_on_single_post_page',
-			'_whp_hide_on_post_navigation'  => 'hide_on_post_navigation',
-			'_whp_hide_on_recent_posts'     => 'hide_on_recent_posts',
-			'_whp_hide_on_archive'          => 'hide_on_archive',
-			'_whp_hide_on_rest_api'         => 'hide_on_rest_api',
-		];
+		$meta_keys = array(
+			'_whp_hide_on_frontpage'            => 'hide_on_frontpage',
+			'_whp_hide_on_blog_page'            => 'hide_on_blog_page',
+			'_whp_hide_on_cpt_archive'          => 'hide_on_cpt_archive',
+			'_whp_hide_on_categories'           => 'hide_on_categories',
+			'_whp_hide_on_search'               => 'hide_on_search',
+			'_whp_hide_on_tags'                 => 'hide_on_tags',
+			'_whp_hide_on_authors'              => 'hide_on_authors',
+			'_whp_hide_on_date'                 => 'hide_on_date',
+			'_whp_hide_in_rss_feed'             => 'hide_in_rss_feed',
+			'_whp_hide_on_store'                => 'hide_on_store',
+			'_whp_hide_on_product_category'     => 'hide_on_product_category',
+			'_whp_hide_on_single_post_page'     => 'hide_on_single_post_page',
+			'_whp_hide_on_post_navigation'      => 'hide_on_post_navigation',
+			'_whp_hide_on_recent_posts'         => 'hide_on_recent_posts',
+			'_whp_hide_on_archive'              => 'hide_on_archive',
+			'_whp_hide_on_rest_api'             => 'hide_on_rest_api',
+			'_whp_hide_on_xml_sitemap'          => 'hide_on_xml_sitemap',
+			'_whp_hide_on_yoast_sitemap'        => 'hide_on_yoast_sitemap',
+			'_whp_hide_on_yoast_breadcrumbs'    => 'hide_on_yoast_breadcrumbs',
+			'_whp_hide_on_yoast_internal_links' => 'hide_on_yoast_internal_links',
+		);
 
+		// Use optimized INSERT ... SELECT for bulk migration (faster than individual inserts).
 		foreach ( $meta_keys as $meta_key => $condition ) {
-			$posts = $wpdb->get_results(
+			// Use INSERT IGNORE to skip duplicates automatically.
+			$sql = $wpdb->prepare(
+				"INSERT IGNORE INTO {$table_name} (post_id, `condition`)
+				SELECT post_id, %s
+				FROM {$wpdb->postmeta}
+				WHERE meta_key = %s",
+				$condition,
+				$meta_key
+			);
+
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$wpdb->query( $sql );
+
+			if ( $wpdb->last_error ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( sprintf( 'WHP: Migration error for %s: %s', $meta_key, $wpdb->last_error ) );
+				continue;
+			}
+
+			// Delete migrated postmeta entries.
+			$wpdb->query(
 				$wpdb->prepare(
-					"
-					SELECT post_id
-					FROM {$wpdb->postmeta}
-					WHERE meta_key = %s
-					",
+					"DELETE FROM {$wpdb->postmeta} WHERE meta_key = %s",
 					$meta_key
 				)
 			);
 
-			foreach ( $posts as $post ) {
-				$exist = whp_plugin()->get_whp_meta( $post->post_id, $condition );
-
-				if ( $exist ) {
-					continue;
-				}
-
-				$wpdb->insert(
-					$table_name,
-					array(
-						'post_id'   => $post->post_id,
-						'condition' => $condition,
-					),
-					array(
-						'%d',
-						'%s',
-					)
-				);
-
-				delete_post_meta( $post->post_id, $meta_key );
+			if ( $wpdb->last_error ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( sprintf( 'WHP: Failed to delete legacy meta %s: %s', $meta_key, $wpdb->last_error ) );
 			}
 		}
 
 		update_option( 'whp_data_migrated', true );
+
+		// Release the lock.
+		delete_transient( 'whp_migration_lock' );
+	}
+
+	/**
+	 * Check if there's any legacy postmeta data that needs migration
+	 *
+	 * @return bool True if legacy data exists, false otherwise
+	 */
+	private function has_legacy_data() {
+		global $wpdb;
+
+		// Check if any of the legacy meta keys exist in postmeta table.
+		$legacy_meta_keys = array(
+			'_whp_hide_on_frontpage',
+			'_whp_hide_on_blog_page',
+			'_whp_hide_on_cpt_archive',
+			'_whp_hide_on_categories',
+			'_whp_hide_on_search',
+			'_whp_hide_on_tags',
+			'_whp_hide_on_authors',
+			'_whp_hide_on_date',
+			'_whp_hide_in_rss_feed',
+			'_whp_hide_on_store',
+			'_whp_hide_on_product_category',
+			'_whp_hide_on_single_post_page',
+			'_whp_hide_on_post_navigation',
+			'_whp_hide_on_recent_posts',
+			'_whp_hide_on_archive',
+			'_whp_hide_on_rest_api',
+			'_whp_hide_on_xml_sitemap',
+			'_whp_hide_on_yoast_sitemap',
+			'_whp_hide_on_yoast_breadcrumbs',
+			'_whp_hide_on_yoast_internal_links',
+		);
+
+		// Use a single query to check if ANY of these meta keys exist.
+		$placeholders = implode( ', ', array_fill( 0, count( $legacy_meta_keys ), '%s' ) );
+		$sql          = "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key IN ($placeholders) LIMIT 1";
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$count = (int) $wpdb->get_var( $wpdb->prepare( $sql, $legacy_meta_keys ) );
+
+		return $count > 0;
 	}
 
 	/**
@@ -181,9 +246,16 @@ class Dashboard {
 			);
 
 			echo '<div class="notice notice-success">';
-			echo '<p>Migration Complete.</p>';
-			echo '<p><a href="' . esc_url( $action_url ) . '" class="button button-primary">Close Notice</a></p>';
+			echo '<p><strong>' . esc_html__( 'Hide Posts Plugin:', 'whp-hide-posts' ) . '</strong> ' . esc_html__( 'Migration Complete.', 'whp-hide-posts' ) . '</p>';
+			echo '<p><a href="' . esc_url( $action_url ) . '" class="button button-primary">' . esc_html__( 'Close Notice', 'whp-hide-posts' ) . '</a></p>';
 			echo '</div>';
+			return;
+		}
+
+		// Check if there's actually any legacy data to migrate.
+		if ( ! $this->has_legacy_data() ) {
+			// No legacy data found, mark as migrated and don't show notice.
+			update_option( 'whp_data_migrated', true );
 			return;
 		}
 
@@ -196,8 +268,8 @@ class Dashboard {
 		);
 
 		echo '<div class="notice notice-warning is-dismissible">';
-		echo '<p>Important: We implemented new table for managing the hide flags in our plugin which optimizes the query and improve overall performance. <strong>Please create database backup before proceeding, just in case.</strong></p>';
-		echo '<p><a href="' . esc_url( $action_url ) . '" class="button button-primary">Migrate Hide Post Data</a></p>';
+		echo '<p><strong>' . esc_html__( 'Hide Posts Plugin:', 'whp-hide-posts' ) . '</strong> ' . esc_html__( 'Important: We implemented a new table for managing hide flags which optimizes queries and improves overall performance.', 'whp-hide-posts' ) . ' <strong>' . esc_html__( 'Please create a database backup before proceeding, just in case.', 'whp-hide-posts' ) . '</strong></p>';
+		echo '<p><a href="' . esc_url( $action_url ) . '" class="button button-primary">' . esc_html__( 'Migrate Hide Post Data', 'whp-hide-posts' ) . '</a></p>';
 		echo '</div>';
 	}
 
@@ -207,17 +279,22 @@ class Dashboard {
 	 * @return void
 	 */
 	public function handle_migration_action() {
+		// Check user capability first.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
 		$data_migrated = get_option( 'whp_data_migrated', false );
 
 		if ( $data_migrated ) {
 			$data_migrated_notice_closed = get_option( 'whp_data_migrated_notice_closed', false );
 
 			if ( ! $data_migrated_notice_closed ) {
-				if ( ! isset( $_GET['action'] ) || 'whp_hide_posts_migration_complete_notice_close' !== $_GET['action'] ) {
+				if ( ! isset( $_GET['action'] ) || 'whp_hide_posts_migration_complete_notice_close' !== sanitize_text_field( wp_unslash( $_GET['action'] ) ) ) {
 					return;
 				}
 
-				if ( ! isset( $_GET['__nonce'] ) || ! wp_verify_nonce( $_GET['__nonce'], 'whp-hide-posts-migration-complete-nonce' ) ) {
+				if ( ! isset( $_GET['__nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['__nonce'] ) ), 'whp-hide-posts-migration-complete-nonce' ) ) {
 					return;
 				}
 
@@ -230,17 +307,17 @@ class Dashboard {
 			return;
 		}
 
-		if ( ! isset( $_GET['action'] ) || 'whp_hide_posts_migrate_data' !== $_GET['action'] ) {
+		if ( ! isset( $_GET['action'] ) || 'whp_hide_posts_migrate_data' !== sanitize_text_field( wp_unslash( $_GET['action'] ) ) ) {
 			return;
 		}
 
-		if ( ! isset( $_GET['__nonce'] ) || ! wp_verify_nonce( $_GET['__nonce'], 'whp-hide-posts-migrate-data-nonce' ) ) {
+		if ( ! isset( $_GET['__nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['__nonce'] ) ), 'whp-hide-posts-migrate-data-nonce' ) ) {
 			return;
 		}
 
 		$this->migrate_meta_to_table();
 
 		wp_safe_redirect( remove_query_arg( array( 'action', '__nonce' ) ) );
-        exit;
+		exit;
 	}
 }

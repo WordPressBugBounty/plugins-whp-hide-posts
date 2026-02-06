@@ -4,7 +4,7 @@
  *
  * @link https://en-gb.wordpress.org/plugins/duplicate-post/
  *
- * @package    WordPressHidePosts
+ * @package    HidePostsPlugin
  */
 
 namespace MartinCV\WHP;
@@ -41,7 +41,7 @@ class Yoast_Duplicate_Post {
 	public function duplicate_post_copy_whp_flags( $new_id, $post ) {
 		global $wpdb;
 
-		$table_name = $wpdb->prefix . 'whp_posts_visibility';
+		$table_name = esc_sql( $wpdb->prefix . 'whp_posts_visibility' );
 
 		$conditions = $wpdb->get_col(
 			$wpdb->prepare(
@@ -50,9 +50,15 @@ class Yoast_Duplicate_Post {
 			)
 		);
 
+		if ( $wpdb->last_error ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( 'WHP: Failed to get conditions for post %d: %s', $post->ID, $wpdb->last_error ) );
+			return;
+		}
+
 		if ( ! empty( $conditions ) ) {
 			foreach ( $conditions as $condition ) {
-				$wpdb->insert(
+				$result = $wpdb->insert(
 					$table_name,
 					array(
 						'post_id'   => $new_id,
@@ -63,6 +69,11 @@ class Yoast_Duplicate_Post {
 						'%s',
 					)
 				);
+
+				if ( false === $result && $wpdb->last_error ) {
+					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					error_log( sprintf( 'WHP: Failed to copy condition %s to post %d: %s', $condition, $new_id, $wpdb->last_error ) );
+				}
 			}
 		}
 	}

@@ -2,7 +2,7 @@
 /**
  * Autoloader
  *
- * @package    WordPressHidePosts
+ * @package    HidePostsPlugin
  */
 
 /**

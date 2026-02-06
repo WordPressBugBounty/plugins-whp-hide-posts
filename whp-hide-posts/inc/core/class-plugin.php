@@ -4,7 +4,7 @@
  *
  * @since 1.0.0
  *
- * @package    WordPressHidePosts
+ * @package    HidePostsPlugin
  */
 
 namespace MartinCV\WHP\Core;
@@ -39,7 +39,26 @@ class Plugin {
 	public function is_woocommerce_product() {
 		global $post;
 
+		if ( ! $post instanceof \WP_Post ) {
+			return false;
+		}
+
 		return 'product' === $post->post_type;
+	}
+
+	/**
+	 * Check if Yoast SEO is active.
+	 *
+	 * @return  bool
+	 */
+	public function is_yoast_seo_active() {
+		// Check for Yoast SEO or Yoast SEO Premium.
+		$yoast_free    = 'wordpress-seo/wp-seo.php';
+		$yoast_premium = 'wordpress-seo-premium/wp-seo-premium.php';
+
+		$active_plugins = (array) get_option( 'active_plugins', array() );
+
+		return in_array( $yoast_free, $active_plugins, true ) || in_array( $yoast_premium, $active_plugins, true );
 	}
 
 	/**
@@ -76,23 +95,31 @@ class Plugin {
 
 		global $wpdb;
 
-		$table_name = $wpdb->prefix . 'whp_posts_visibility';
-
-		$sql = $wpdb->prepare( "SELECT DISTINCT post_id FROM {$table_name} WHERE `condition` = %s AND post_id IN (SELECT ID FROM {$wpdb->posts} WHERE post_type = %s)", $key, $post_type );
+		$table_name = esc_sql( $wpdb->prefix . 'whp_posts_visibility' );
 
 		if ( 'all' === $key ) {
-			$sql = $wpdb->prepare( "SELECT DISTINCT post_id FROM {$table_name} WHERE `condition` LIKE %s AND post_id IN (SELECT ID FROM {$wpdb->posts} WHERE post_type = %s)", $key, $post_type );
+			$like_pattern = $wpdb->esc_like( 'hide_' ) . '%';
+			$sql          = $wpdb->prepare( "SELECT DISTINCT post_id FROM {$table_name} WHERE `condition` LIKE %s AND post_id IN (SELECT ID FROM {$wpdb->posts} WHERE post_type = %s)", $like_pattern, $post_type );
+		} else {
+			$sql = $wpdb->prepare( "SELECT DISTINCT post_id FROM {$table_name} WHERE `condition` = %s AND post_id IN (SELECT ID FROM {$wpdb->posts} WHERE post_type = %s)", $key, $post_type );
 		}
 
 		$hidden_posts = $wpdb->get_col( $sql );
 
+		if ( $wpdb->last_error ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( 'WHP: Failed to get hidden posts: %s', $wpdb->last_error ) );
+			return array();
+		}
+
 		if ( empty( $hidden_posts ) && $fallback ) {
 			$key = '_whp_' . $key;
 
-			$sql = $wpdb->prepare( "SELECT DISTINCT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND post_id IN (SELECT ID FROM {$wpdb->posts} WHERE post_type = %s)", $key, $post_type );
-
-			if ( 'all' === $key ) {
-				$sql = $wpdb->prepare( "SELECT DISTINCT post_id FROM {$wpdb->postmeta} WHERE meta_key LIKE %s AND post_id IN (SELECT ID FROM {$wpdb->posts} WHERE post_type = %s)", $key, $post_type );
+			if ( '_whp_all' === $key ) {
+				$like_pattern = $wpdb->esc_like( '_whp_hide_' ) . '%';
+				$sql          = $wpdb->prepare( "SELECT DISTINCT post_id FROM {$wpdb->postmeta} WHERE meta_key LIKE %s AND post_id IN (SELECT ID FROM {$wpdb->posts} WHERE post_type = %s)", $like_pattern, $post_type );
+			} else {
+				$sql = $wpdb->prepare( "SELECT DISTINCT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND post_id IN (SELECT ID FROM {$wpdb->posts} WHERE post_type = %s)", $key, $post_type );
 			}
 
 			$hidden_posts = $wpdb->get_col( $sql );
@@ -156,6 +183,33 @@ class Plugin {
 	}
 
 	/**
+	 * Check if we should use the custom table (true) or need to fall back to post meta (false)
+	 * Returns true if:
+	 * - Data has been migrated (whp_data_migrated = true), OR
+	 * - Fresh installation (no legacy postmeta exists)
+	 *
+	 * @return boolean
+	 */
+	public function should_use_custom_table() {
+		$data_migrated = get_option( 'whp_data_migrated', false );
+
+		// If explicitly migrated, use custom table.
+		if ( $data_migrated ) {
+			return true;
+		}
+
+		// Check if there's any legacy postmeta - if not, it's a fresh install.
+		global $wpdb;
+		$has_legacy_data = $wpdb->get_var(
+			"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key LIKE '_whp_hide%' LIMIT 1"
+		);
+
+		// If no legacy data exists, it's a fresh install - use custom table.
+		// If legacy data exists but not migrated, use fallback.
+		return ! $has_legacy_data;
+	}
+
+	/**
 	 * Check if post is hidden in the custom table
 	 *
 	 * @param  int  $post_id  The post id.
@@ -167,7 +221,7 @@ class Plugin {
 	public function get_whp_meta( $post_id, $key, $fallback = false ) {
 		global $wpdb;
 
-		$table_name = $wpdb->prefix . 'whp_posts_visibility';
+		$table_name = esc_sql( $wpdb->prefix . 'whp_posts_visibility' );
 
 		$hidden_post = (int) $wpdb->get_var(
 			$wpdb->prepare(
@@ -176,6 +230,12 @@ class Plugin {
 				$key
 			)
 		);
+
+		if ( $wpdb->last_error ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( 'WHP: Failed to check post meta for post %d: %s', $post_id, $wpdb->last_error ) );
+			return false;
+		}
 
 		if ( $hidden_post ) {
 			return true;
@@ -196,15 +256,29 @@ class Plugin {
 	 *
 	 * @return boolean
 	 */
-	public function add_whp_meta( $post_id, $key, $fallback = false ) {
+	public function add_whp_meta( $post_id, $key ) {
 		global $wpdb;
 
-		$table_name = $wpdb->prefix . 'whp_posts_visibility';
+		$table_name = esc_sql( $wpdb->prefix . 'whp_posts_visibility' );
 
-		$wpdb->insert(
+		// Check if it already exists.
+		$exists = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$table_name} WHERE post_id = %d AND `condition` = %s",
+				$post_id,
+				$key
+			)
+		);
+
+		if ( $exists ) {
+			// Already exists, no need to insert.
+			return true;
+		}
+
+		$result = $wpdb->insert(
 			$table_name,
 			array(
-				'post_id' => $post_id,
+				'post_id'   => $post_id,
 				'condition' => $key,
 			),
 			array(
@@ -212,25 +286,34 @@ class Plugin {
 				'%s',
 			)
 		);
+
+		if ( false === $result && $wpdb->last_error ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( 'WHP: Failed to add meta for post %d: %s', $post_id, $wpdb->last_error ) );
+			return false;
+		}
+
+		return true;
 	}
 
 	/**
 	 * Remove post from hiding
 	 *
-	 * @param  int    $post_id  The post id.
-	 * @param  string $key      The key name.
+	 * @param  int     $post_id         The post id.
+	 * @param  string  $key             The key name.
+	 * @param  boolean $delete_postmeta Whether to also delete legacy postmeta.
 	 *
 	 * @return boolean
 	 */
-	public function delete_whp_meta( $post_id, $key, $fallback = false ) {
+	public function delete_whp_meta( $post_id, $key, $delete_postmeta = false ) {
 		global $wpdb;
 
-		$table_name = $wpdb->prefix . 'whp_posts_visibility';
+		$table_name = esc_sql( $wpdb->prefix . 'whp_posts_visibility' );
 
-		$wpdb->delete(
+		$result = $wpdb->delete(
 			$table_name,
 			array(
-				'post_id' => $post_id,
+				'post_id'   => $post_id,
 				'condition' => $key,
 			),
 			array(
@@ -239,6 +322,16 @@ class Plugin {
 			)
 		);
 
-		delete_post_meta( $post_id, '_whp_' . $key );
+		if ( false === $result && $wpdb->last_error ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( 'WHP: Failed to delete meta for post %d: %s', $post_id, $wpdb->last_error ) );
+			return false;
+		}
+
+		if ( $delete_postmeta ) {
+			delete_post_meta( $post_id, '_whp_' . $key );
+		}
+
+		return true;
 	}
 }

@@ -1,18 +1,18 @@
 <?php
 /**
- * Plugin Name: WordPress Hide Posts
- * Description: Hides posts on home page, categories, search, tags page, authors page, RSS Feed as well as hiding Woocommerce products
+ * Plugin Name: Hide Posts
+ * Description: Hides posts on home page, categories, search, tags page, authors page, RSS Feed, XML sitemaps, Yoast SEO as well as hiding Woocommerce products
  * Author:      MartinCV
  * Author URI:  https://www.martincv.com
- * Version:     2.0.3
+ * Version:     2.1.0
  * Text Domain: whp-hide-posts
  *
- * WordPress Hide Posts is free software: you can redistribute it and/or modify
+ * Hide Posts is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * any later version.
  *
- * WordPress Hide Posts is distributed in the hope that it will be useful,
+ * Hide Posts is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with WordPress Hide Posts. If not, see <http://www.gnu.org/licenses/>.
  *
- * @package    WordPressHidePosts
+ * @package    HidePostsPlugin
  * @author     MartinCV
  * @since      0.0.1
  * @license    GPL-3.0+
@@ -35,11 +35,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Main class
  */
-final class WordPressHidePosts {
+final class HidePostsPlugin {
 	/**
 	 * Instance of the plugin
 	 *
-	 * @var WordPressHidePosts
+	 * @var HidePostsPlugin
 	 */
 	private static $instance;
 
@@ -48,16 +48,16 @@ final class WordPressHidePosts {
 	 *
 	 * @var string
 	 */
-	private $version = '2.0.3';
+	private $version = '2.1.0';
 
 	/**
 	 * Instance of this plugin
 	 *
-	 * @return  WordPressHidePosts
+	 * @return  HidePostsPlugin
 	 */
 	public static function instance() {
-		if ( ! isset( self::$instance ) && ! ( self::$instance instanceof WordPressHidePosts ) ) {
-			self::$instance = new WordPressHidePosts();
+		if ( ! isset( self::$instance ) && ! ( self::$instance instanceof HidePostsPlugin ) ) {
+			self::$instance = new HidePostsPlugin();
 			self::$instance->constants();
 			self::$instance->includes();
 
@@ -115,14 +115,25 @@ final class WordPressHidePosts {
 		\MartinCV\WHP\Zeen_Theme::get_instance();
 		\MartinCV\WHP\Core\Database::get_instance()->create_tables();
 
+		// Initialize metabox (needed for both admin and REST API/Gutenberg).
+		\MartinCV\WHP\Admin\Post_Hide_Metabox::get_instance();
+
+		// Initialize REST API for Gutenberg (custom table, no postmeta).
+		\MartinCV\WHP\REST_API::get_instance();
+
 		// Init classes if is Admin/Dashboard.
 		if ( is_admin() ) {
 			\MartinCV\WHP\Admin\Dashboard::get_instance();
-			\MartinCV\WHP\Admin\Post_Hide_Metabox::get_instance();
 			\MartinCV\WHP\Yoast_Duplicate_Post::get_instance();
 		} else {
 			\MartinCV\WHP\Post_Hide::get_instance();
 		}
+
+		// Initialize SEO integrations (works on both frontend and admin).
+		\MartinCV\WHP\SEO_Integration::get_instance();
+
+		// Initialize cache manager.
+		\MartinCV\WHP\Cache_Manager::get_instance();
 	}
 
 	/**
@@ -135,7 +146,7 @@ final class WordPressHidePosts {
 	}
 }
 
-WordPressHidePosts::instance();
+HidePostsPlugin::instance();
 
 if ( ! function_exists( 'whp_plugin' ) ) {
 	/**

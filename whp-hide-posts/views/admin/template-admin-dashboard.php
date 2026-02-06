@@ -2,7 +2,7 @@
 /**
  * Admin Settings Page Template
  *
- * @package    WordPressHidePosts
+ * @package    HidePostsPlugin
  */
 
 ?>
