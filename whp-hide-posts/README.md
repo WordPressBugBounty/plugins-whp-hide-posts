@@ -3,9 +3,9 @@ Contributors: martin7ba
 Donate link: https://www.martincv.com/whp-donate
 Tags: hide posts, hide, show, visibility, hide products
 Requires at least: 5.0
-Tested up to: 6.8.3
+Tested up to: 7.1
 Requires PHP: 7.3
-Stable tag: 2.1.0
+Stable tag: 2.1.2
 License: GPLv3 or later
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -72,6 +72,23 @@ This is possible. This functionality is not free. You can contact me at [martin@
 3. Post Lists table 'Hidden on' column.
 
 == Changelog ==
+
+= 2.1.2 =
+_Release Date - 30 July 2026_
+
+- Fixed: posts marked "Hide from Yoast internal link suggestions" disappearing from the admin Posts list. The integration now uses Yoast's `wpseo_link_suggestions_indexables` filter and correctly hides posts from internal link suggestions (Yoast SEO Premium) instead of altering unrelated queries.
+- Fixed: "Hide on Yoast SEO sitemap" not working — the integration now uses Yoast's `wpseo_exclude_from_sitemap_by_post_ids` filter to exclude individual posts.
+- Fixed: cache invalidation when hide options are saved from the Classic Editor, Quick Edit, or the Gutenberg sidebar — changes now take effect immediately.
+- Fixed: empty results are now cached, avoiding a repeated database query on every request.
+- Fixed: uninstall now also removes the legacy "Hide in RSS feed" post meta.
+- Fixed: translation loading moved to `init` for WordPress 6.7+ compatibility.
+- Improved: hardened input handling in the Classic Editor save handler and the Gutenberg REST endpoint; removed unused code.
+- Compatibility: tested up to WordPress 7.1.
+
+= 2.1.1 =
+_Release Date - 30 December 2025_
+
+- Potential bug fix where hidden posts do not show in the admin area.
 
 = 2.1.0 =
 _Release Date - 24 November 2025_

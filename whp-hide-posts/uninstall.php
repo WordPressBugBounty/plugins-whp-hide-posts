@@ -17,5 +17,10 @@ delete_option( 'whp_disable_hidden_on_column' );
 
 global $wpdb;
 $table_name = esc_sql( $wpdb->prefix . 'whp_posts_visibility' );
-$wpdb->query( "DELETE FROM {$wpdb->prefix}postmeta WHERE meta_key LIKE '_whp_hide_on_%'" );
+$wpdb->query(
+	$wpdb->prepare(
+		"DELETE FROM {$wpdb->postmeta} WHERE meta_key LIKE %s",
+		$wpdb->esc_like( '_whp_hide_' ) . '%'
+	)
+);
 $wpdb->query( "DROP TABLE IF EXISTS $table_name" );

@@ -132,8 +132,35 @@ class REST_API {
 			return new \WP_Error( 'post_not_found', 'Post not found', array( 'status' => 404 ) );
 		}
 
+		$allowed_conditions = array(
+			'hide_on_frontpage',
+			'hide_on_categories',
+			'hide_on_search',
+			'hide_on_tags',
+			'hide_on_authors',
+			'hide_in_rss_feed',
+			'hide_on_blog_page',
+			'hide_on_date',
+			'hide_on_post_navigation',
+			'hide_on_recent_posts',
+			'hide_on_archive',
+			'hide_on_cpt_archive',
+			'hide_on_rest_api',
+			'hide_on_single_post_page',
+			'hide_on_xml_sitemap',
+			'hide_on_yoast_sitemap',
+			'hide_on_yoast_breadcrumbs',
+			'hide_on_yoast_internal_links',
+			'hide_on_store',
+			'hide_on_product_category',
+		);
+
 		// Save each setting directly to custom table (NOT postmeta).
 		foreach ( $params as $key => $value ) {
+			if ( ! in_array( $key, $allowed_conditions, true ) ) {
+				continue;
+			}
+
 			$value = rest_sanitize_boolean( $value );
 
 			if ( $value ) {
@@ -141,12 +168,9 @@ class REST_API {
 			} else {
 				whp_plugin()->delete_whp_meta( $post_id, $key, false );
 			}
-		}
 
-		// Clear cache.
-		$cache_key = 'whp_' . $post->post_type . '_all';
-		wp_cache_delete( $cache_key, 'whp' );
-		delete_transient( $cache_key );
+			whp_plugin()->clear_hidden_posts_cache( $post->post_type, $key );
+		}
 
 		return rest_ensure_response( array( 'success' => true ) );
 	}

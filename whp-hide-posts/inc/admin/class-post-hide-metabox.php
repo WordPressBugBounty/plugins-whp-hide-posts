@@ -53,154 +53,6 @@ class Post_Hide_Metabox {
 	}
 
 	/**
-	 * Register meta fields for Gutenberg/Block Editor
-	 * This exposes the meta fields to the REST API so Gutenberg can save them
-	 *
-	 * @return void
-	 */
-	public function register_meta_for_gutenberg() {
-		$post_types = whp_plugin()->get_enabled_post_types();
-
-		$meta_keys = array(
-			'_whp_hide_on_frontpage',
-			'_whp_hide_on_categories',
-			'_whp_hide_on_search',
-			'_whp_hide_on_tags',
-			'_whp_hide_on_authors',
-			'_whp_hide_in_rss_feed',
-			'_whp_hide_on_blog_page',
-			'_whp_hide_on_date',
-			'_whp_hide_on_post_navigation',
-			'_whp_hide_on_recent_posts',
-			'_whp_hide_on_cpt_archive',
-			'_whp_hide_on_archive',
-			'_whp_hide_on_rest_api',
-			'_whp_hide_on_single_post_page',
-			'_whp_hide_on_xml_sitemap',
-			'_whp_hide_on_yoast_sitemap',
-			'_whp_hide_on_yoast_breadcrumbs',
-			'_whp_hide_on_yoast_internal_links',
-			'_whp_hide_on_store',
-			'_whp_hide_on_product_category',
-		);
-
-		foreach ( $post_types as $post_type ) {
-			foreach ( $meta_keys as $meta_key ) {
-				register_post_meta(
-					$post_type,
-					$meta_key,
-					array(
-						'type'              => 'boolean',
-						'single'            => true,
-						'show_in_rest'      => true,
-						'sanitize_callback' => 'rest_sanitize_boolean',
-						'auth_callback'     => function () {
-							return current_user_can( 'edit_posts' );
-						},
-					)
-				);
-			}
-		}
-	}
-
-	/**
-	 * Sync postmeta to custom table after it's added/updated
-	 * This fires AFTER WordPress saves post meta (Gutenberg compatibility)
-	 *
-	 * @param int    $meta_id    Meta ID.
-	 * @param int    $object_id  Post ID.
-	 * @param string $meta_key   Meta key.
-	 * @param mixed  $meta_value Meta value.
-	 *
-	 * @return void
-	 */
-	public function sync_meta_to_custom_table( $meta_id, $object_id, $meta_key, $meta_value ) {
-		// Only process our registered meta keys.
-		if ( strpos( $meta_key, '_whp_hide_' ) !== 0 ) {
-			return;
-		}
-
-		// Check if this is an enabled post type.
-		$post = get_post( $object_id );
-		if ( ! $post ) {
-			return;
-		}
-
-		$enabled_post_types = whp_plugin()->get_enabled_post_types();
-		if ( ! in_array( $post->post_type, $enabled_post_types, true ) ) {
-			return;
-		}
-
-		// Extract the condition name from meta key.
-		$condition = str_replace( '_whp_', '', $meta_key );
-
-		// Sync to custom table.
-		if ( $meta_value ) {
-			whp_plugin()->add_whp_meta( $object_id, $condition );
-		} else {
-			whp_plugin()->delete_whp_meta( $object_id, $condition, false );
-		}
-
-		// Clear cache.
-		$this->clear_post_cache( $post->post_type, $condition );
-	}
-
-	/**
-	 * Sync postmeta deletion to custom table
-	 *
-	 * @param array  $meta_ids   Array of deleted metadata IDs.
-	 * @param int    $object_id  Post ID.
-	 * @param string $meta_key   Meta key.
-	 * @param mixed  $meta_value Meta value.
-	 *
-	 * @return void
-	 */
-	public function sync_meta_deletion_to_custom_table( $meta_ids, $object_id, $meta_key, $meta_value ) {
-		// Only process our registered meta keys.
-		if ( strpos( $meta_key, '_whp_hide_' ) !== 0 ) {
-			return;
-		}
-
-		// Check if this is an enabled post type.
-		$post = get_post( $object_id );
-		if ( ! $post ) {
-			return;
-		}
-
-		$enabled_post_types = whp_plugin()->get_enabled_post_types();
-		if ( ! in_array( $post->post_type, $enabled_post_types, true ) ) {
-			return;
-		}
-
-		// Extract the condition name from meta key.
-		$condition = str_replace( '_whp_', '', $meta_key );
-
-		// Delete from custom table.
-		whp_plugin()->delete_whp_meta( $object_id, $condition, false );
-
-		// Clear cache.
-		$this->clear_post_cache( $post->post_type, $condition );
-	}
-
-	/**
-	 * Clear cache for a specific post type and condition
-	 *
-	 * @param string $post_type The post type.
-	 * @param string $condition The condition.
-	 *
-	 * @return void
-	 */
-	private function clear_post_cache( $post_type, $condition ) {
-		$cache_key = 'whp_' . $post_type . '_' . $condition;
-		wp_cache_delete( $cache_key, 'whp' );
-		delete_transient( $cache_key );
-
-		$cache_key = 'whp_' . $post_type . '_all';
-		wp_cache_delete( $cache_key, 'whp' );
-		delete_transient( $cache_key );
-	}
-
-	/**
 	 * Load admin assets
 	 *
 	 * @return  void
@@ -520,51 +372,46 @@ class Post_Hide_Metabox {
 			return $post_id;
 		}
 
-		$args = $_POST;
-
-		// Data to be stored in the database.
-		$data['hide_on_frontpage']            = ! empty( $args['whp_hide_on_frontpage'] ) ? true : false;
-		$data['hide_on_categories']           = ! empty( $args['whp_hide_on_categories'] ) ? true : false;
-		$data['hide_on_search']               = ! empty( $args['whp_hide_on_search'] ) ? true : false;
-		$data['hide_on_tags']                 = ! empty( $args['whp_hide_on_tags'] ) ? true : false;
-		$data['hide_on_authors']              = ! empty( $args['whp_hide_on_authors'] ) ? true : false;
-		$data['hide_in_rss_feed']             = ! empty( $args['whp_hide_in_rss_feed'] ) ? true : false;
-		$data['hide_on_blog_page']            = ! empty( $args['whp_hide_on_blog_page'] ) ? true : false;
-		$data['hide_on_date']                 = ! empty( $args['whp_hide_on_date'] ) ? true : false;
-		$data['hide_on_post_navigation']      = ! empty( $args['whp_hide_on_post_navigation'] ) ? true : false;
-		$data['hide_on_recent_posts']         = ! empty( $args['whp_hide_on_recent_posts'] ) ? true : false;
-		$data['hide_on_archive']              = ! empty( $args['whp_hide_on_archive'] ) ? true : false;
-		$data['hide_on_cpt_archive']          = ! empty( $args['whp_hide_on_cpt_archive'] ) ? true : false;
-		$data['hide_on_rest_api']             = ! empty( $args['whp_hide_on_rest_api'] ) ? true : false;
-		$data['hide_on_single_post_page']     = ! empty( $args['whp_hide_on_single_post_page'] ) ? true : false;
-		$data['hide_on_xml_sitemap']          = ! empty( $args['whp_hide_on_xml_sitemap'] ) ? true : false;
-		$data['hide_on_yoast_sitemap']        = ! empty( $args['whp_hide_on_yoast_sitemap'] ) ? true : false;
-		$data['hide_on_yoast_breadcrumbs']    = ! empty( $args['whp_hide_on_yoast_breadcrumbs'] ) ? true : false;
-		$data['hide_on_yoast_internal_links'] = ! empty( $args['whp_hide_on_yoast_internal_links'] ) ? true : false;
+		// Data to be stored in the database, built from a whitelist of known conditions.
+		$conditions = array(
+			'hide_on_frontpage',
+			'hide_on_categories',
+			'hide_on_search',
+			'hide_on_tags',
+			'hide_on_authors',
+			'hide_in_rss_feed',
+			'hide_on_blog_page',
+			'hide_on_date',
+			'hide_on_post_navigation',
+			'hide_on_recent_posts',
+			'hide_on_archive',
+			'hide_on_cpt_archive',
+			'hide_on_rest_api',
+			'hide_on_single_post_page',
+			'hide_on_xml_sitemap',
+			'hide_on_yoast_sitemap',
+			'hide_on_yoast_breadcrumbs',
+			'hide_on_yoast_internal_links',
+		);
 
 		if ( whp_plugin()->is_woocommerce_active() && whp_plugin()->is_woocommerce_product() ) {
-			$data['hide_on_store']            = ! empty( $args['whp_hide_on_store'] ) ? true : false;
-			$data['hide_on_product_category'] = ! empty( $args['whp_hide_on_product_category'] ) ? true : false;
+			$conditions[] = 'hide_on_store';
+			$conditions[] = 'hide_on_product_category';
 		}
 
-		// Sanitize inputs.
-		$this->sanitize_inputs( $data );
+		$data = array();
+
+		foreach ( $conditions as $condition ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+			$data[ $condition ] = ! empty( $_POST[ 'whp_' . $condition ] );
+		}
 
 		// Save meta and get changed conditions.
 		$changed_conditions = $this->save_meta_data( $data, $post_id );
 
 		// Only clear cache for conditions that actually changed (optimized).
 		foreach ( $changed_conditions as $condition ) {
-			$cache_key = 'whp_' . $post->post_type . '_' . $condition;
-			wp_cache_delete( $cache_key, 'whp' );
-			delete_transient( $cache_key );
-		}
-
-		// Also clear "all" cache if anything changed.
-		if ( ! empty( $changed_conditions ) ) {
-			$cache_key = 'whp_' . $post->post_type . '_all';
-			wp_cache_delete( $cache_key, 'whp' );
-			delete_transient( $cache_key );
+			whp_plugin()->clear_hidden_posts_cache( $post->post_type, $condition );
 		}
 	}
 
@@ -597,31 +444,6 @@ class Post_Hide_Metabox {
 		}
 
 		return $changed;
-	}
-
-	/**
-	 * Sanitize post inputs
-	 *
-	 * @param  array $post_data Post data array.
-	 *
-	 * @return void
-	 */
-	private function sanitize_inputs( &$post_data ) {
-		$sanitized_data = array();
-
-		foreach ( $post_data as $key => $value ) {
-			if ( is_array( $value ) ) {
-				$sanitized_data[ $key ] = array();
-
-				foreach ( $value as $v ) {
-					$sanitized_data[ $key ][] = sanitize_text_field( wp_unslash( $v ) );
-				}
-			} else {
-				$sanitized_data[ $key ] = sanitize_meta( $key, $value, 'post' );
-			}
-		}
-
-		$post_data = $sanitized_data;
 	}
 
 	/**
@@ -822,16 +644,7 @@ class Post_Hide_Metabox {
 		$post_type = $post ? $post->post_type : 'post';
 
 		foreach ( $changed_conditions as $condition ) {
-			$cache_key = 'whp_' . $post_type . '_' . $condition;
-			wp_cache_delete( $cache_key, 'whp' );
-			delete_transient( $cache_key );
-		}
-
-		// Also clear "all" cache if anything changed.
-		if ( ! empty( $changed_conditions ) ) {
-			$cache_key = 'whp_' . $post_type . '_all';
-			wp_cache_delete( $cache_key, 'whp' );
-			delete_transient( $cache_key );
+			whp_plugin()->clear_hidden_posts_cache( $post_type, $condition );
 		}
 
 		wp_send_json_success( array( 'message' => __( 'Post updated successfully', 'whp-hide-posts' ) ) );

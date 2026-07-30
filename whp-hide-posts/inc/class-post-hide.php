@@ -60,6 +60,11 @@ class Post_Hide {
 	 * @return array
 	 */
 	public function hide_from_rest_api( $args, $request ) {
+		// Don't hide posts in admin context (edit mode).
+		if ( 'edit' === $request->get_param( 'context' ) ) {
+			return $args;
+		}
+
 		if ( ! in_array( $args['post_type'], $this->enabled_post_types, true ) ) {
 			return $args;
 		}

@@ -73,15 +73,16 @@ class Plugin {
 	public function get_hidden_posts_ids( $post_type = 'post', $from = 'all', $fallback = false ) {
 		$cache_key = 'whp_' . $post_type . '_' . $from;
 
-		$hidden_posts = wp_cache_get( $cache_key, 'whp' );
+		$found        = false;
+		$hidden_posts = wp_cache_get( $cache_key, 'whp', false, $found );
 
-		if ( $hidden_posts ) {
+		if ( $found && is_array( $hidden_posts ) ) {
 			return $hidden_posts;
 		}
 
 		$hidden_posts = get_transient( $cache_key );
 
-		if ( $hidden_posts ) {
+		if ( is_array( $hidden_posts ) ) {
 			return $hidden_posts;
 		}
 
@@ -333,5 +334,34 @@ class Plugin {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Clear all cache entries for a post type + condition combination.
+	 *
+	 * Read-side caches are keyed by the short "from" key (e.g. `whp_post_yoast_internal_links`),
+	 * so both the raw condition key and its mapped short key are cleared, plus the `_all` key.
+	 *
+	 * @param  string $post_type The post type.
+	 * @param  string $condition The condition name (e.g. `hide_on_frontpage`).
+	 *
+	 * @return void
+	 */
+	public function clear_hidden_posts_cache( $post_type, $condition ) {
+		$keys = array(
+			'whp_' . $post_type . '_' . $condition,
+			'whp_' . $post_type . '_all',
+		);
+
+		$from = array_search( '_whp_' . $condition, Constants::HIDDEN_POSTS_KEYS_LIST, true );
+
+		if ( $from ) {
+			$keys[] = 'whp_' . $post_type . '_' . $from;
+		}
+
+		foreach ( array_unique( $keys ) as $key ) {
+			wp_cache_delete( $key, 'whp' );
+			delete_transient( $key );
+		}
 	}
 }

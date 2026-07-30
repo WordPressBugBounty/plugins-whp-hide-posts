@@ -4,7 +4,7 @@
  * Description: Hides posts on home page, categories, search, tags page, authors page, RSS Feed, XML sitemaps, Yoast SEO as well as hiding Woocommerce products
  * Author:      MartinCV
  * Author URI:  https://www.martincv.com
- * Version:     2.1.0
+ * Version:     2.1.2
  * Text Domain: whp-hide-posts
  *
  * Hide Posts is free software: you can redistribute it and/or modify
@@ -48,7 +48,7 @@ final class HidePostsPlugin {
 	 *
 	 * @var string
 	 */
-	private $version = '2.1.0';
+	private $version = '2.1.2';
 
 	/**
 	 * Instance of this plugin
@@ -62,6 +62,7 @@ final class HidePostsPlugin {
 			self::$instance->includes();
 
 			add_action( 'plugins_loaded', array( self::$instance, 'run' ) );
+			add_action( 'init', array( self::$instance, 'load_textdomain' ) );
 		}
 
 		return self::$instance;
@@ -110,8 +111,6 @@ final class HidePostsPlugin {
 	 * @return  void
 	 */
 	public function run() {
-		$this->load_textdomain();
-
 		\MartinCV\WHP\Zeen_Theme::get_instance();
 		\MartinCV\WHP\Core\Database::get_instance()->create_tables();
 
@@ -139,9 +138,11 @@ final class HidePostsPlugin {
 	/**
 	 * Register textdomain
 	 *
+	 * Hooked on `init` — WordPress 6.7+ warns when translations load earlier.
+	 *
 	 * @return  void
 	 */
-	private function load_textdomain() {
+	public function load_textdomain() {
 		load_plugin_textdomain( 'whp-hide-posts', false, basename( dirname( __FILE__ ) ) . '/languages' );
 	}
 }
