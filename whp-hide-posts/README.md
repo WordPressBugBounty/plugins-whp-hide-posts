@@ -9,27 +9,31 @@ Stable tag: 2.1.2
 License: GPLv3 or later
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
-Allows you to hide any posts on the home page, category page, search page, tags page, authors page, RSS Feed, REST API, XML sitemaps, SEO integrations and more.
+Hide posts or WooCommerce products from the homepage, archives, search, RSS, REST API, sitemaps and SEO tools — per-post control in any editor.
 
 == Description ==
 
-This plugin allows you to hide any posts on the home page, category page, search page, tags page, authors page, RSS Feed, REST API, Post Navigation, Native Recent Posts Widget, XML sitemaps, Yoast SEO sitemap, breadcrumbs and internal link suggestions.
+**Publish it — without putting it everywhere.** Hide Posts gives you a simple checklist on every post, page, or product that controls exactly where it appears: keep a post out of the homepage and archives, off the search results, out of your RSS feed and REST API, or invisible to XML sitemaps and Yoast SEO — while it stays perfectly reachable at its own URL.
+
+Perfect for syndication-only articles, landing pages, evergreen content you don't want cluttering the blog roll, or products that should only be found via direct link.
 
 [Try the Demo](https://demo.tastewp.com/whp-hide-posts "Demo")
 
-= Features: =
+= Choose exactly where a post is hidden: =
 
-- Hide posts on specific archives and pages (home, categories, search, tags, authors, date, blog page, etc.)
-- Hide posts from RSS Feed and REST API
-- Hide posts from XML sitemaps (WordPress core and Yoast SEO)
-- Hide posts from Yoast SEO breadcrumbs and internal link suggestions
-- Full Gutenberg Block Editor support with metabox in sidebar
-- Works with Gutenberg Query Loop and Latest Posts blocks
-- Custom Post Types support - enable hide functionality for any post type
-- WooCommerce integration - hide products on store page, category pages, and REST API
-- Bulk Edit and Quick Edit support for efficient management
-- Custom database table for optimized performance
-- Comprehensive caching for fast page loads
+- **Site pages** — homepage, blog page, category, tag, author, and date archives, search results, post navigation (previous/next), and the Recent Posts widget
+- **Feeds & APIs** — RSS feed and the REST API
+- **Sitemaps & SEO** — WordPress core XML sitemaps, Yoast SEO sitemap, Yoast breadcrumbs, and Yoast internal link suggestions
+- **WooCommerce** — hide products from the shop page, product category pages, and the store REST API
+
+= Built for real editorial workflows: =
+
+- Full Block Editor support — a native sidebar panel with all hide options, plus the classic metabox
+- Works with the Query Loop block and custom queries
+- Enable hiding for any Custom Post Type from the settings page
+- Bulk Edit and Quick Edit support for managing many posts at once
+- "Hidden On" column in the posts list so you always see what's hidden where
+- Custom database table and layered caching — no postmeta bloat, no slow queries on busy sites
 
 == Installation ==
 
@@ -54,6 +58,34 @@ you want to use the Hide functionality. The functionality is enabled by default 
 If you need any additional help fell free to contact me at [martin@martincv.com](mailto:martin@martincv.com) for more information.
 
 == Frequently Asked Questions ==
+
+= Is a hidden post still accessible on its own URL? =
+
+Yes — by design. Hiding controls where a post is *listed* (homepage, archives, search, feeds, sitemaps, etc.), not who can open it. Anyone with the direct link can still read it, which is exactly what you want for syndication-only or direct-link content. If you need to restrict access itself, use WordPress' built-in Private or Password-protected post status instead.
+
+= Will hiding a post remove it from Google? =
+
+No. Hiding a post from the XML sitemap only removes it from the sitemap — search engines that already know the URL can still index it. To keep a post out of search results, set it to "noindex" with your SEO plugin (e.g. Yoast's "Allow search engines to show this content?" setting). The two work well together: hide it from your site's listings here, noindex it there.
+
+= I checked a hide option but the post is still showing. Why? =
+
+The plugin clears its own caches the moment you save, so first check external layers: a page cache, object cache, or CDN can keep serving the old page — purge those. If the post appears via a theme or page-builder widget that runs its own custom database query, that query bypasses WordPress' standard hooks and the plugin cannot filter it.
+
+= Why do hidden posts still appear in the wp-admin Posts list? =
+
+That's intentional — you need to see and manage hidden posts. The "Hidden On" column shows exactly where each post is hidden. Hiding only affects visitor-facing output.
+
+= Does it work with Custom Post Types? =
+
+Yes. Go to Settings → Hide Posts and enable the post types you want. Posts are enabled by default, and WooCommerce products get their own store-specific options.
+
+= Do I need Yoast SEO Premium for the internal link suggestions option? =
+
+The "Hide from Yoast internal link suggestions" option applies to Yoast's internal linking suggestions, which are a Yoast SEO Premium feature. The Yoast sitemap and breadcrumb options work with free Yoast SEO.
+
+= What happens if I deactivate or delete the plugin? =
+
+Deactivating simply stops the hiding — all posts reappear everywhere, nothing is lost. Deleting the plugin also removes its settings and visibility data, so hidden posts become fully visible again.
 
 = This plugin saved me a lot of work. Where can I donate? =
 
